@@ -1,0 +1,30 @@
+=== RELATORIO DE ANALISE DE GRAFO ===
+
+Arquivo de entrada: grafo_5.txt
+Representacao utilizada: lista
+506 MB
+
+--- Informacoes Basicas ---
+Vertices: 4843750
+Arestas: 13168928
+
+--- Benchmark de Performance (100 execucoes) ---
+Tempo total BFS: 52070 ms
+Tempo medio por BFS: 520.7000 ms
+Tempo total DFS: 53762 ms
+Tempo medio por DFS: 537.6200 ms
+
+--- Estatisticas de Grau ---
+Grau Minimo: 1
+Grau Maximo: 22
+Grau Medio: 5.4375
+Mediana do Grau: 5.0000
+
+--- Componentes Conexas ---
+Quantidade: 5
+Tamanho da Maior Componente: 2500000
+Tamanho da Menor Componente: 156250
+
+--- Diametro ---
+Exato: Nao calculado (grafo muito grande)
+Aproximado (2-BFS): 12
