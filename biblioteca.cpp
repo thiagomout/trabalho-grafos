@@ -129,7 +129,6 @@ pair<vector<int>, vector<int>> bfs(const Grafo& grafo, int s) {
     return {pai, nivel};
 }
 
-// Adicionando a DFS genérica para o benchmark
 pair<vector<int>, vector<int>> dfs(const Grafo& grafo, int s) {
     int n = grafo.get_num_vertices();
     vector<int> pai(n + 1, -1), nivel(n + 1, -1);
@@ -146,7 +145,6 @@ pair<vector<int>, vector<int>> dfs(const Grafo& grafo, int s) {
         auto [u, niv_u] = pilha.top();
         pilha.pop();
         
-        // Iteramos em ordem reversa para que a DFS explore na mesma ordem de uma implementação recursiva
         auto vizinhos = grafo.get_vizinhos(u);
         reverse(vizinhos.begin(), vizinhos.end());
 
@@ -160,6 +158,11 @@ pair<vector<int>, vector<int>> dfs(const Grafo& grafo, int s) {
         }
     }
     return {pai, nivel};
+}
+
+int distancia(const Grafo& grafo, int u, int v) {
+    auto [_, nivel] = bfs(grafo, u);
+    return nivel[v];
 }
 
 vector<vector<int>> componentes_conexas(const Grafo& grafo) {
@@ -273,8 +276,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    const string caminho_arquivo = "grafo_6.txt";
-    const string arquivo_saida = "ResultadoGrafo6lista.txt";
+    const string caminho_arquivo = "grafo_2.txt";
+    const string arquivo_saida = "RelatorioCompleto.txt";
 
     cout << "Lendo dados do grafo de '" << caminho_arquivo << "'...\n";
     auto [n, m, adj_data] = ler_dados_grafo(caminho_arquivo);
@@ -299,16 +302,14 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Medindo BFS
     auto bfs_start = chrono::high_resolution_clock::now();
     for (int s : seeds) {
-        volatile auto r = bfs(*grafo, s); // `volatile` para evitar otimizações excessivas
+        volatile auto r = bfs(*grafo, s);
     }
     auto bfs_end = chrono::high_resolution_clock::now();
     auto bfs_duration = chrono::duration_cast<chrono::milliseconds>(bfs_end - bfs_start);
     double bfs_avg = (double)bfs_duration.count() / N_RUNS;
     
-    // Medindo DFS
     auto dfs_start = chrono::high_resolution_clock::now();
     for (int s : seeds) {
         volatile auto r = dfs(*grafo, s);
@@ -318,10 +319,7 @@ int main(int argc, char* argv[]) {
     double dfs_avg = (double)dfs_duration.count() / N_RUNS;
     
     cout << "Benchmark concluido.\n";
-    cout << "  BFS: " << bfs_duration.count() << " ms no total (" << fixed << setprecision(4) << bfs_avg << " ms em media por busca).\n";
-    cout << "  DFS: " << dfs_duration.count() << " ms no total (" << fixed << setprecision(4) << dfs_avg << " ms em media por busca).\n";
 
-    // --- Análises do Grafo ---
     cout << "\nIniciando analise completa do grafo...\n";
     
     auto [gmin, gmax, gmed, gmediana] = estatisticas_grau(*grafo);
@@ -337,9 +335,26 @@ int main(int argc, char* argv[]) {
         cout << "AVISO: Grafo muito grande (n=" << n << "). Pulando calculo do diametro exato.\n";
     }
     
+    vector<int> origens_pais = {1, 2, 3};
+    vector<int> alvos_pais = {10, 20, 30};
+    map<int, vector<int>> bfs_pais_resultados, dfs_pais_resultados;
+    for (int s : origens_pais) {
+        auto [pais_b, _b] = bfs(*grafo, s);
+        auto [pais_d, _d] = dfs(*grafo, s);
+        for (int alvo : alvos_pais) {
+            bfs_pais_resultados[s].push_back(pais_b[alvo]);
+            dfs_pais_resultados[s].push_back(pais_d[alvo]);
+        }
+    }
+    
+    vector<pair<int, int>> pares_dist = {{10, 20}, {10, 30}, {20, 30}};
+    vector<int> resultados_dist;
+    for (const auto& par : pares_dist) {
+        resultados_dist.push_back(distancia(*grafo, par.first, par.second));
+    }
+
     cout << "Analise concluida. Gerando relatorio...\n";
 
-    // --- Geração do Relatório ---
     ofstream out(arquivo_saida);
     out << "=== RELATORIO DE ANALISE DE GRAFO ===\n\n";
     out << "Arquivo de entrada: " << caminho_arquivo << "\n";
@@ -372,8 +387,21 @@ int main(int argc, char* argv[]) {
     } else {
         out << "Exato: Nao calculado (grafo muito grande)\n";
     }
-    out << "Aproximado (2-BFS): " << diam_aprox << "\n";
+    out << "Aproximado (2-BFS): " << diam_aprox << "\n\n";
     
+    out << "--- Item 4.4: Pais dos Vertices 10, 20, 30 ---\n";
+    for (int s : origens_pais) {
+        out << "Buscas a partir do vertice " << s << ":\n";
+        out << "  [BFS] Pais de (10, 20, 30): (" << bfs_pais_resultados[s][0] << ", " << bfs_pais_resultados[s][1] << ", " << bfs_pais_resultados[s][2] << ")\n";
+        out << "  [DFS] Pais de (10, 20, 30): (" << dfs_pais_resultados[s][0] << ", " << dfs_pais_resultados[s][1] << ", " << dfs_pais_resultados[s][2] << ")\n";
+    }
+    out << "\n";
+
+    out << "--- Item 4.5: Distancia entre Pares ---\n";
+    out << "  Distancia (10, 20): " << resultados_dist[0] << "\n";
+    out << "  Distancia (10, 30): " << resultados_dist[1] << "\n";
+    out << "  Distancia (20, 30): " << resultados_dist[2] << "\n";
+
     out.close();
     cout << "\nRelatorio salvo em '" << arquivo_saida << "'.\n";
 
