@@ -13,7 +13,8 @@
 #include <climits>
 #include <memory>
 #include <chrono>
-#include <numeric> 
+#include <numeric>
+#include <limits>
 
 using namespace std;
 
@@ -24,6 +25,7 @@ public:
     virtual int get_num_vertices() const = 0;
     virtual long long get_num_arestas() const = 0;
     virtual vector<int> get_vizinhos(int u) const = 0;
+    virtual vector<pair<int, double>> get_vizinhos_com_peso(int u) const = 0;
 };
 
 // -------------------- Implementação com Lista de Adjacência --------------------
@@ -31,16 +33,29 @@ class GrafoListaAdj : public Grafo {
 private:
     int n;
     long long m;
-    vector<vector<int>> adj;
+    vector<vector<pair<int, double>>> adj;
 
 public:
-    GrafoListaAdj(int num_vertices, long long num_arestas, vector<vector<int>>&& lista_adj)
+    GrafoListaAdj(int num_vertices, long long num_arestas, vector<vector<pair<int, double>>>&& lista_adj)
         : n(num_vertices), m(num_arestas), adj(move(lista_adj)) {}
 
     int get_num_vertices() const override { return n; }
     long long get_num_arestas() const override { return m; }
     vector<int> get_vizinhos(int u) const override {
-        if (u > 0 && (size_t)u < adj.size()) return adj[u];
+        vector<int> vizinhos_ids;
+        if (u > 0 && (size_t)u < adj.size()) {
+            vizinhos_ids.reserve(adj[u].size()); // linha de otimização de memória
+            for (const auto& par : adj[u]) {
+                vizinhos_ids.push_back(par.first);
+            }
+        }
+        return vizinhos_ids;
+    }
+
+    vector<pair<int, double>> get_vizinhos_com_peso(int u) const override {
+        if (u > 0 && (size_t)u < adj.size()) {
+            return adj[u];
+        }
         return {};
     }
 };
@@ -50,16 +65,19 @@ class GrafoMatrizAdj : public Grafo {
 private:
     int n;
     long long m;
-    vector<vector<int>> M;
+    vector<vector<double>> M;
 
 public:
-    GrafoMatrizAdj(int num_vertices, long long num_arestas, const vector<vector<int>>& adj_list)
+    GrafoMatrizAdj(int num_vertices, long long num_arestas, const vector<vector<pair<int, double>>>& adj_list)
         : n(num_vertices), m(num_arestas) {
-        M.assign(n, vector<int>(n, 0));
+        const double INF = std::numeric_limits<double>::infinity();
+        M.assign(n, vector<double>(n, INF));
         for (int u = 1; u <= n; ++u) {
             if((size_t)u < adj_list.size()) {
-                for (int v : adj_list[u]) {
-                    M[u - 1][v - 1] = 1;
+                for (const auto& par : adj_list[u]) {
+                    int v = par.first;
+                    double w = par.second;
+                    M[u - 1][v - 1] = w;
                 }
             }
         }
@@ -68,20 +86,34 @@ public:
     int get_num_vertices() const override { return n; }
     long long get_num_arestas() const override { return m; }
     vector<int> get_vizinhos(int u) const override {
-        vector<int> vizinhos;
+        vector<int> vizinhos_ids;
         if (u > 0 && u <= n) {
+            const double INF = std::numeric_limits<double>::infinity();
             for (int j = 0; j < n; ++j) {
-                if (M[u - 1][j] == 1) {
-                    vizinhos.push_back(j + 1);
+                if (M[u - 1][j] != INF) {
+                    vizinhos_ids.push_back(j + 1);
                 }
             }
         }
-        return vizinhos;
+        return vizinhos_ids;
+    }
+    vector<pair<int, double>> get_vizinhos_com_peso(int u) const override {
+        vector<pair<int, double>> vizinhos_com_peso;
+        if (u > 0 && u <= n) {
+            const double INF = std::numeric_limits<double>::infinity();
+            for (int j = 0; j < n; ++j) {
+                if (M[u - 1][j] != INF) {
+                    vizinhos_com_peso.push_back({j + 1, M[u - 1][j]});
+                }
+            }
+        }
+        return vizinhos_com_peso;
     }
 };
 
+
 // -------------------- Leitura do grafo --------------------
-tuple<int, long long, vector<vector<int>>> ler_dados_grafo(const string& caminho) {
+tuple<int, long long, vector<vector<pair<int, double>>>> ler_dados_grafo(const string& caminho) {
     ifstream f(caminho);
     if (!f) {
         cerr << "Erro: Nao foi possivel abrir o arquivo: " << caminho << "\n";
@@ -92,13 +124,14 @@ tuple<int, long long, vector<vector<int>>> ler_dados_grafo(const string& caminho
     string rest;
     getline(f, rest);
 
-    vector<vector<int>> adj(n + 1);
+    vector<vector<pair<int, double>>> adj(n + 1);
     long long m = 0;
     int u, v;
-    while (f >> u >> v) {
+    double w;
+    while (f >> u >> v >> w) {
         if (u > n || v > n || u < 1 || v < 1) continue;
-        adj[u].push_back(v);
-        adj[v].push_back(u);
+        adj[u].push_back({v, w});
+        adj[v].push_back({u, w});
         m++;
     }
     return {n, m, adj};
