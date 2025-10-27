@@ -114,7 +114,7 @@ public:
 
 
 // -------------------- Leitura do grafo --------------------
-tuple<int, long long, vector<vector<pair<int, double>>>> ler_dados_grafo(const string& caminho) {
+tuple<int, long long, vector<vector<pair<int, double>>>, bool> ler_dados_grafo(const string& caminho) {
     ifstream f(caminho);
     if (!f) {
         cerr << "Erro: Nao foi possivel abrir o arquivo: " << caminho << "\n";
@@ -129,13 +129,18 @@ tuple<int, long long, vector<vector<pair<int, double>>>> ler_dados_grafo(const s
     long long m = 0;
     int u, v;
     double w;
+
+    bool tem_peso_negativo = false;
+
     while (f >> u >> v >> w) {
         if (u > n || v > n || u < 1 || v < 1) continue;
+
+        if (w < 0) tem_peso_negativo = true;
         adj[u].push_back({v, w});
         adj[v].push_back({u, w});
         m++;
     }
-    return {n, m, adj};
+    return {n, m, adj, tem_peso_negativo};
 }
 
 // -------------------- Algoritmos Genéricos --------------------
@@ -454,7 +459,7 @@ int main(int argc, char* argv[]) {
     const string arquivo_saida = "RelatorioCompleto.txt";
 
     cout << "Lendo dados do grafo de '" << caminho_arquivo << "'...\n";
-    auto [n, m, adj_data] = ler_dados_grafo(caminho_arquivo);
+    auto [n, m, adj_data, tem_peso_negativo] = ler_dados_grafo(caminho_arquivo);
     
     unique_ptr<Grafo> grafo;
     if (tipo_representacao == "lista") {
