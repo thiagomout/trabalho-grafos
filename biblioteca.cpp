@@ -15,6 +15,7 @@
 #include <chrono>
 #include <numeric>
 #include <limits>
+#include <queue>
 
 using namespace std;
 
@@ -138,6 +139,146 @@ tuple<int, long long, vector<vector<pair<int, double>>>> ler_dados_grafo(const s
 }
 
 // -------------------- Algoritmos Genéricos --------------------
+
+class FilaDePrioridade {
+public:
+    virtual ~FilaDePrioridade() = default;
+
+    virtual void inicializar(int num_vertices, int s) = 0;
+    
+    virtual bool esta_vazia() const = 0;
+    
+    // Retorna o ID do vértice com a menor distância e o remove da fila.
+    virtual int extrair_min() = 0;
+    
+    // Atualiza a distância de um vértice na fila (se for menor).
+    virtual void inserir_ou_atualizar(int vertice, double nova_distancia) = 0;
+
+    virtual double get_distancia(int v) const = 0;
+};
+
+class FilaComVetor : public FilaDePrioridade {
+private:
+    vector<double> dist;
+    vector<bool> visitado;
+    int n;
+    int restantes; // Contador de quantos vértices ainda faltam visitar
+
+public:
+    void inicializar(int num_vertices, int s) override {
+        n = num_vertices;
+        restantes = n;
+        const double INFINITO = std::numeric_limits<double>::infinity();
+        
+        dist.assign(n + 1, INFINITO);
+        visitado.assign(n + 1, false);
+        
+        dist[s] = 0.0;
+    }
+
+    bool esta_vazia() const override {
+        return restantes == 0;
+    }
+
+    int extrair_min() override {
+        double min_dist = std::numeric_limits<double>::infinity();
+        int min_v = -1;
+
+        // Loop O(V): Encontra o vértice não-visitado com menor distância
+        for (int v = 1; v <= n; ++v) {
+            if (!visitado[v] && dist[v] < min_dist) {
+                min_dist = dist[v];
+                min_v = v;
+            }
+        }
+
+        if (min_v != -1) {
+            visitado[min_v] = true; // "Remove" da fila
+            restantes--;
+        }
+        return min_v; // Retorna -1 se todos os restantes forem infinitos
+    }
+
+    void inserir_ou_atualizar(int vertice, double nova_distancia) override {
+        // alterar o valor no vetor de distâncias.
+        dist[vertice] = nova_distancia;
+    }
+    double get_distancia(int v) const override {
+        return dist[v];
+    }
+};
+
+class FilaComHeap : public FilaDePrioridade {
+private:
+// O 'greater' o torna um min-heap (ordena pelo menor primeiro).
+    using Par = pair<double, int>; // {distancia, vertice}
+    std::priority_queue<Par, vector<Par>, greater<Par>> heap;
+    vector<double> dist;
+    int n;
+public:
+    void inicializar(int num_vertices, int s) override {
+        n = num_vertices;
+        const double INFINITO = std::numeric_limits<double>::infinity();
+        dist.assign(n + 1, INFINITO);
+        dist[s] = 0.0;
+        heap.push({0.0, s});
+    }
+
+    bool esta_vazia() const override {
+        return heap.empty();
+    }
+
+    int extrair_min() override {
+        while (!heap.empty()) {
+            auto [d, v] = heap.top();
+            heap.pop();
+            // Verifica se é a distância mais atual
+            if (d == dist[v]) {
+                return v;
+            }
+        }
+        return -1; // Fila vazia
+    }
+    void inserir_ou_atualizar(int vertice, double nova_distancia) override {
+        if (nova_distancia < dist[vertice]) {
+            dist[vertice] = nova_distancia;
+            heap.push({nova_distancia, vertice});
+        }
+    }
+
+    double get_distancia(int v) const override {
+        return dist[v];
+    }
+};
+
+pair<vector<double>, vector<int>> dijkstra(const Grafo& grafo, int s, FilaDePrioridade& fila) {
+    int n = grafo.get_num_vertices();
+    const double INFINITO = std::numeric_limits<double>::infinity();
+    vector<int> pai(n + 1, -1);
+
+    fila.inicializar(n, s);
+
+    while (!fila.esta_vazia()) {
+        int u = fila.extrair_min();
+        if (u == -1 || fila.get_distancia(u) == INFINITO) break; // Todos os restantes são infinitos
+
+        for (const auto& par : grafo.get_vizinhos_com_peso(u)) {
+            int v = par.first;
+            double peso = par.second;
+            double nova_dist = fila.get_distancia(u) + peso;
+            if (nova_dist < fila.get_distancia(v)) {
+                fila.inserir_ou_atualizar(v, nova_dist);
+                pai[v] = u;
+            }
+        }
+    }
+
+    vector<double> dist_final(n + 1, INFINITO);
+    for (int v = 1; v <= n; ++v) {
+        dist_final[v] = fila.get_distancia(v);
+    }
+    return {dist_final, pai};
+}
 
 pair<vector<int>, vector<int>> bfs(const Grafo& grafo, int s) {
     int n = grafo.get_num_vertices();
