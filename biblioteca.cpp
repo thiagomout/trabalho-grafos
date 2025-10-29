@@ -17,10 +17,11 @@
 #include <limits>
 #include <queue>
 #include <random>
-#include <filesystem>
+#include <filesystem> 
 
 using namespace std;
 
+// ... [Classes Grafo, GrafoListaAdj, GrafoMatrizAdj -] ...
 // -------------------- Interface Abstrata do Grafo --------------------
 class Grafo {
 public:
@@ -115,7 +116,18 @@ public:
 };
 
 
-// -------------------- Leitura do grafo --------------------
+// -------------------- Leitura de dados --------------------
+
+// ... [Funções trim, ler_dados_grafo] ...
+string trim(const string& str) {
+    size_t first = str.find_first_not_of(" \t\n\r");
+    if (string::npos == first) {
+        return str;
+    }
+    size_t last = str.find_last_not_of(" \t\n\r");
+    return str.substr(first, (last - first + 1));
+}
+
 tuple<int, long long, vector<vector<pair<int, double>>>, bool> ler_dados_grafo(const string& caminho) {
     ifstream f(caminho);
     if (!f) {
@@ -143,6 +155,103 @@ tuple<int, long long, vector<vector<pair<int, double>>>, bool> ler_dados_grafo(c
         m++;
     }
     return {n, m, adj, tem_peso_negativo};
+}
+
+pair<map<string, int>, vector<string>> ler_mapeamento_vertices(const string& caminho_mapa, int n) {
+    ifstream f(caminho_mapa);
+    if (!f) {
+        cerr << "Erro: Nao foi possivel abrir o arquivo de mapeamento: " << caminho_mapa << "\n";
+        return {{}, vector<string>(n + 1, "N/A")};
+    }
+
+    map<string, int> nome_para_id;
+    vector<string> id_para_nome(n + 1, "NOME_DESCONHECIDO"); 
+    string linha;
+
+    cout << "\n--- DEBUG: INICIANDO LEITURA (Modo Robusto) ---" << endl;
+
+    // --- Checagem de BOM (Byte Order Mark) ---
+    // Lê os 3 primeiros bytes
+    char bom[3];
+    f.read(bom, 3);
+    if (f.gcount() == 3 && (unsigned char)bom[0] == 0xEF && (unsigned char)bom[1] == 0xBB && (unsigned char)bom[2] == 0xBF) {
+        cout << "--- DEBUG: BOM UTF-8 detectado e removido." << endl;
+    } else {
+        // Não era BOM, volta para o início
+        f.seekg(0);
+    }
+
+    int linha_count = 0;
+    // Agora lê linha por linha
+    while (getline(f, linha)) {
+        linha_count++;
+        if (linha.empty() || linha == "\r") continue; // Pula linhas em branco
+
+        // Encontra a primeira vírgula
+        size_t pos_virgula = linha.find(',');
+        if (pos_virgula == string::npos) {
+            // Linha mal formatada
+            if (linha_count < 10) cout << "  [DEBUG] AVISO: Linha " << linha_count << " mal formatada (sem virgula): [" << linha << "]" << endl;
+            continue;
+        }
+
+        // Extrai ID (string) e Nome (string)
+        string id_str = linha.substr(0, pos_virgula);
+        string nome_str = linha.substr(pos_virgula + 1);
+
+        // Converte ID para int
+        int id;
+        try {
+            id = stoi(trim(id_str));
+        } catch (...) {
+            if (linha_count < 10) cout << "  [DEBUG] AVISO: Linha " << linha_count << " tem ID invalido: [" << id_str << "]" << endl;
+            continue;
+        }
+
+        // Limpa o nome
+        string nome_final = trim(nome_str);
+        
+        if (id > 0 && id <= n) {
+            nome_para_id[nome_final] = id;
+            id_para_nome[id] = nome_final;
+        }
+        
+
+    }
+    
+    cout << "Mapeamento lido. " << nome_para_id.size() << " nomes carregados de " << linha_count << " linhas.\n";
+    
+    vector<string> chaves_teste = {
+        "Edsger W. Dijkstra",
+        "Alan M. Turing",
+        "Joseph B. Kruskal",
+        "Éva Tardos",
+        "Daniel Figueiredo"
+    };
+
+    for (const string& key : chaves_teste) {
+        if (nome_para_id.count(key)) {
+            cout << "--- DEBUG: SUCESSO! Chave '" << key << "' FOI encontrada (ID: " << nome_para_id[key] << ")." << endl;
+        } else {
+            
+            // Tenta encontrar algo parecido para nos dar uma pista
+            string parte_key;
+            if (key.find(" ") != string::npos) {
+                parte_key = key.substr(key.find(" ") + 1); // Pega o sobrenome
+            } else {
+                parte_key = key;
+            }
+
+            for(const auto& par : nome_para_id) {
+                if (par.first.find(parte_key) != string::npos) {
+                    cout << "--- DEBUG: -> Encontrada chave similar: [\"" << par.first << "\"]" << endl;
+                    break; // Mostra só a primeira similar
+                }
+            }
+        }
+    }
+
+    return {nome_para_id, id_para_nome};
 }
 
 // -------------------- Algoritmos Genéricos --------------------
@@ -442,14 +551,11 @@ void pausa(const string& msg) {
     cout << endl;
 }
 
+
 // -------------------- Utilitários de Saída/Relatório --------------------
 namespace RelatorioUtils {
 
-    /**
-     * @brief Retorna uma string com o caminho (ex: "1 -> 5 -> 10").
-     */
     string get_caminho_str(int origem, int destino, const vector<int>& pai) {
-        // Se o destino não tem pai e não é a própria origem...
         if (pai[destino] == -1 && destino != origem) {
             return (destino == origem) ? to_string(origem) : "Nenhum";
         }
@@ -457,7 +563,7 @@ namespace RelatorioUtils {
         stringstream ss;
         stack<int> caminho;
         int atual = destino;
-        while (atual != -1) { // -1 é o 'pai' da origem
+        while (atual != -1) { 
             caminho.push(atual);
             atual = pai[atual];
         }
@@ -472,39 +578,80 @@ namespace RelatorioUtils {
         return ss.str();
     }
 
-    /**
-     * @brief Imprime uma linha de tabela formatada em um stream (cout ou file).
-     * @param out O stream de saída (ex: cout ou um ofstream).
-     */
+    string get_caminho_str_com_nomes(int origem_id, int destino_id, const vector<int>& pai, const vector<string>& id_para_nome) {
+        if (pai[destino_id] == -1 && destino_id != origem_id) {
+            return "Nenhum";
+        }
+
+        stringstream ss;
+        stack<int> caminho_ids;
+        int atual = destino_id;
+        while (atual != -1) {
+            caminho_ids.push(atual);
+            atual = pai[atual];
+        }
+        
+        while (!caminho_ids.empty()) {
+            int id_atual = caminho_ids.top();
+            caminho_ids.pop();
+            
+            string nome = (id_atual > 0 && (size_t)id_atual < id_para_nome.size()) 
+                            ? id_para_nome[id_atual] 
+                            : ("ID(" + to_string(id_atual) + ")");
+            
+            ss << nome;
+            
+            if (!caminho_ids.empty()) {
+                ss << " -> ";
+            }
+        }
+        return ss.str();
+    }
+
     void imprimir_linha_tabela(ostream& out, const string& col1, const string& col2, const string& col3) {
-        out << "  | " << left << setw(10) << col1
+        out << "   | " << left << setw(10) << col1
             << " | " << left << setw(18) << col2
             << " | " << left << setw(35) << col3 << " |" << endl;
     }
 
-    /**
-     * @brief Imprime o cabeçalho/rodapé da tabela de distâncias do Dijkstra.
-     */
     void imprimir_borda_tabela_dijkstra(ostream& out) {
-        out << "  +------------+--------------------+-------------------------------------+" << endl;
+        out << "   +------------+--------------------+-------------------------------------+" << endl;
     }
+
+    void imprimir_linha_tabela_nomes(ostream& out, const string& col1, const string& col2, const string& col3) {
+        out << " | " << left << setw(25) << col1 // Coluna 1 (Nome) aumentada
+            << " | " << left << setw(18) << col2 // Coluna 2 (Dist)
+            << " | " << left << setw(50) << col3 << " |" << endl; // Coluna 3 (Caminho) aumentada
+    }
+
+    void imprimir_borda_tabela_nomes(ostream& out) {
+        out << " +---------------------------+--------------------+----------------------------------------------------+" << endl;
+    }
+
 
     /**
      * @brief Imprime a tabela de resultados do benchmark de performance.
      */
     void imprimir_tabela_benchmark(ostream& out, 
-                                   long long t_total_vetor_ms, double t_medio_vetor, 
-                                   long long t_total_heap_ms, double t_medio_heap) 
+                                     long long t_total_vetor_ms, double t_medio_vetor, 
+                                     long long t_total_heap_ms, double t_medio_heap) 
     {
-        out << "  +------------------+-------------------+------------------+" << endl;
-        out << "  | Implementacao    | Tempo Total (ms)  | Tempo Medio (ms) |" << endl;
-        out << "  +------------------+-------------------+------------------+" << endl;
+        out << "   +------------------+-------------------+------------------+" << endl;
+        out << "   | Implementacao    | Tempo Total (ms)  | Tempo Medio (ms) |" << endl;
+        out << "   +------------------+-------------------+------------------+" << endl;
         out << fixed << setprecision(4); // Garante a formatação correta dos 'doubles'
-        out << "  | Vetor (O(V^2))   | " << left << setw(17) << t_total_vetor_ms 
-             << " | " << left << setw(16) << t_medio_vetor << " |" << endl;
-        out << "  | Heap (O(E log V))| " << left << setw(17) << t_total_heap_ms 
-             << " | " << left << setw(16) << t_medio_heap << " |" << endl;
-        out << "  +------------------+-------------------+------------------+" << endl;
+        
+        // Só imprime a linha do Vetor se ele foi executado
+        if (t_total_vetor_ms > 0 || t_medio_vetor > 0.0) {
+            out << "   | Vetor (O(V^2))   | " << left << setw(17) << t_total_vetor_ms 
+                << " | " << left << setw(16) << t_medio_vetor << " |" << endl;
+        }
+        // Só imprime a linha do Heap se ele foi executado
+        if (t_total_heap_ms > 0 || t_medio_heap > 0.0) {
+            out << "   | Heap (O(E log V))| " << left << setw(17) << t_total_heap_ms 
+                << " | " << left << setw(16) << t_medio_heap << " |" << endl;
+        }
+        out << "   +------------------+-------------------+------------------+" << endl;
     }
 
 } // fim do namespace RelatorioUtils
@@ -514,11 +661,10 @@ int main(int argc, char* argv[]) {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    // --- 1. Validação dos Argumentos ---
     if (argc < 4) {
         cerr << "Erro: Uso incorreto.\n";
         cerr << "Modo Relatorio: ./estudos <lista|matriz> <arquivo.txt> relatorio\n";
-        cerr << "Modo Dijkstra:  ./estudos <lista|matriz> <arquivo.txt> dijkstra [k_benchmark]\n";
+        cerr << "Modo Dijkstra:  ./estudos <lista|matriz> <arquivo.txt> dijkstra [k_benchmark] [vetor|heap|ambos]\n";
         return 1;
     }
     string tipo_representacao = argv[1];
@@ -531,14 +677,12 @@ int main(int argc, char* argv[]) {
 
     // --- Extração do Nome Base do Arquivo ---
     string nome_base_arquivo;
-
     size_t pos_barra = caminho_arquivo.find_last_of("/\\");
     if (pos_barra != string::npos) {
         nome_base_arquivo = caminho_arquivo.substr(pos_barra + 1);
     } else {
         nome_base_arquivo = caminho_arquivo;
     }
-    // Remove a extensão (ex: .txt)
     size_t pos_ponto = nome_base_arquivo.find_last_of(".");
     if (pos_ponto != string::npos) {
         nome_base_arquivo = nome_base_arquivo.substr(0, pos_ponto);
@@ -629,7 +773,6 @@ int main(int argc, char* argv[]) {
         cout << "Analise concluida. Gerando relatorio...\n";
 
         ofstream out(arquivo_saida);
-        // ... (toda a sua lógica de escrita de relatório original vai aqui) ...
         out << "=== RELATORIO DE ANALISE DE GRAFO ===\n\n";
         out << "Arquivo de entrada: " << caminho_arquivo << "\n";
         out << "Representacao utilizada: " << tipo_representacao << "\n\n";
@@ -658,11 +801,9 @@ int main(int argc, char* argv[]) {
         }
         out << "Aproximado (2-BFS): " << diam_aprox << "\n\n";
         
-        // ... (sua lógica de pais e distâncias) ...
         out << "--- Item 4.4: Pais dos Vertices 10, 20, 30 ---\n";
         for (int s : origens_pais) {
             out << "Buscas a partir do vertice " << s << ":\n";
-            // Adicionando verificação de existência da chave
             if(bfs_pais_resultados.count(s)) {
                 out << "  [BFS] Pais de (10, 20, 30): (" << bfs_pais_resultados[s][0] << ", " << bfs_pais_resultados[s][1] << ", " << bfs_pais_resultados[s][2] << ")\n";
             }
@@ -687,15 +828,41 @@ int main(int argc, char* argv[]) {
     // ======================================================================
     else if (modo == "dijkstra") {
         
-        // --- 3. Verificação de Pesos Negativos ---
+        map<string, int> nome_para_id;
+        vector<string> id_para_nome;
+        string caminho_mapa = "";
+        try {
+            std::filesystem::path p_grafo(caminho_arquivo);
+            std::filesystem::path p_mapa = p_grafo.parent_path() / "rede_colaboracao_vertices.txt";
+            if (std::filesystem::exists(p_mapa)) {
+                caminho_mapa = p_mapa.string();
+            } else {
+                p_mapa = "rede_colaboracao_vertices.txt";
+                if (std::filesystem::exists(p_mapa)) {
+                    caminho_mapa = p_mapa.string();
+                }
+            }
+            if (!caminho_mapa.empty()) {
+                cout << "Lendo mapeamento de vertices de '" << caminho_mapa << "'...\n";
+                tie(nome_para_id, id_para_nome) = ler_mapeamento_vertices(caminho_mapa, n);
+            } else {
+                cout << "Aviso: Nao foi possivel encontrar 'rede_colaboracao_vertices.txt'.\n";
+                cout << "       O Estudo de Caso 3.3 (Rede de Colaboracao) sera pulado.\n";
+            }
+        } catch (const std::filesystem::filesystem_error& e) {
+            cerr << "Erro de filesystem ao tentar localizar 'rede_colaboracao_vertices.txt': " << e.what() << "\n";
+            caminho_mapa = ""; // Flag para pular
+        }
+        
+        // --- 4. Verificação de Pesos Negativos ---
         if (tem_peso_negativo) {
             string msg_erro = "AVISO: O grafo possui arestas com peso negativo.\nA biblioteca ainda nao implementa caminhos minimos com pesos negativos.";
             cout << "\n------------------------------------------------------------------\n" << msg_erro << "\n------------------------------------------------------------------" << endl;
-            cerr << msg_erro << endl; // Erros também vão para stderr
-            return 0; // Encerra conforme pedido
+            cerr << msg_erro << endl; 
+            return 0;
         }
 
-        // --- [MODIFICADO] ABRIR ARQUIVO DE SAÍDA PARA O DIJKSTRA ---
+        // --- Abrir Arquivo de Saída ---
         const string arquivo_saida_dijkstra = "Dijkstra_" + nome_base_arquivo + ".txt";
         ofstream out_dijkstra(arquivo_saida_dijkstra);
         if (!out_dijkstra) {
@@ -711,8 +878,8 @@ int main(int argc, char* argv[]) {
         out_dijkstra << "Representacao utilizada: " << tipo_representacao << "\n";
         out_dijkstra << "Vertices: " << n << ", Arestas: " << m << "\n";
 
-        // --- 4. Estudo de Caso 3.1: Distância (10 -> X) ---
-        out_dijkstra << "\n--- Estudo de Caso 3.1: Distancias e Caminhos ---" << endl;
+        // --- 5. Estudo de Caso 3.1: Distância (10 -> X) ---
+        out_dijkstra << "\n--- Estudo de Caso 3.1: Distancias e Caminhos (IDs) ---" << endl;
         int origem_fixa = 10;
         if (origem_fixa > n) {
              out_dijkstra << "Vertice de origem 10 nao existe no grafo." << endl;
@@ -725,76 +892,197 @@ int main(int argc, char* argv[]) {
             vector<int> destinos = {20, 30, 40, 50, 60};
             const double INFINITO = std::numeric_limits<double>::infinity();
 
-            // Usando as funções do namespace RelatorioUtils
             RelatorioUtils::imprimir_borda_tabela_dijkstra(out_dijkstra);
-            RelatorioUtils::imprimir_linha_tabela(out_dijkstra, "Destino", "Distancia", "Caminho");
+            RelatorioUtils::imprimir_linha_tabela(out_dijkstra, "Destino", "Distancia", "Caminho (por IDs)");
             RelatorioUtils::imprimir_borda_tabela_dijkstra(out_dijkstra);
             
-            out_dijkstra << fixed << setprecision(4); // Formatação para os pesos 'double'
+            out_dijkstra << fixed << setprecision(4);
             for (int d : destinos) {
-                if (d > n) continue; // Ignora se o vértice não existe no grafo
+                if (d > n) continue;
                 
                 string dist_str = (dist[d] == INFINITO) ? "INF" : to_string(dist[d]);
-                string caminho_str = (dist[d] == INFINITO) ? "Inalcançavel" : RelatorioUtils::get_caminho_str(origem_fixa, d, pai);
-                RelatorioUtils::imprimir_linha_tabela(out_dijkstra, to_string(d), dist_str, caminho_str);
+                
+                string caminho_str_completo = (dist[d] == INFINITO) ? "Inalcançavel" : RelatorioUtils::get_caminho_str(origem_fixa, d, pai);
+                
+                string caminho_str_tabela;
+                bool foi_truncado = false;
+                // O setw é 35, 33 deixa espaço para "..."
+                const int LIMITE_LARGURA_CAMINHO_IDS = 33; 
+
+                if (caminho_str_completo.length() > LIMITE_LARGURA_CAMINHO_IDS) {
+                    caminho_str_tabela = caminho_str_completo.substr(0, LIMITE_LARGURA_CAMINHO_IDS - 3) + "...";
+                    foi_truncado = true;
+                } else {
+                    caminho_str_tabela = caminho_str_completo;
+                }
+
+                // 1. Imprime a linha da tabela (sempre alinhada)
+                RelatorioUtils::imprimir_linha_tabela(out_dijkstra, to_string(d), dist_str, caminho_str_tabela);
+
+                // 2. Se foi truncado, imprime o caminho completo logo abaixo
+                if (foi_truncado) {
+                    // Indenta a linha para ficar claro que é uma continuação
+                    out_dijkstra << "   |    ... Caminho Completo: " << caminho_str_completo << endl;
+                }
             }
             RelatorioUtils::imprimir_borda_tabela_dijkstra(out_dijkstra);
         }
 
-        // --- 5. Estudo de Caso 3.2: Benchmark Dijkstra (Vetor vs Heap) ---
+        // --- 6. Estudo de Caso 3.2: Benchmark Dijkstra (Vetor vs Heap) ---
+        
+        // --- 6a. Parse dos Argumentos ---
         int k_benchmark = 100; // Default K
-        if (argc > 4) { // Se o usuário forneceu um K
+        string tipo_fila = "ambos"; // Default tipo
+        
+        if (argc == 5) { 
+            string arg4 = argv[4];
             try {
-                k_benchmark = stoi(argv[4]);
+                k_benchmark = stoi(arg4);
             } catch (...) {
-                cerr << "Aviso: k_benchmark invalido. Usando default (100).\n";
-                k_benchmark = 100;
+                tipo_fila = arg4;
             }
+        } else if (argc >= 6) { 
+            string arg4 = argv[4];
+            string arg5 = argv[5];
+            
+            try {
+                k_benchmark = stoi(arg4);
+            } catch (...) {
+                cerr << "Aviso: k_benchmark invalido ('" << arg4 << "'). Usando default (100).\n";
+            }
+            tipo_fila = arg5;
+        }
+
+        if (tipo_fila != "vetor" && tipo_fila != "heap" && tipo_fila != "ambos") {
+            cerr << "Aviso: Tipo de fila '" << tipo_fila << "' invalido. Usando default 'ambos'.\n";
+            tipo_fila = "ambos";
         }
 
         out_dijkstra << "\n--- Estudo de Caso 3.2: Benchmark de Performance (Dijkstra) ---" << endl;
-        out_dijkstra << "Executando " << k_benchmark << " vezes com origens aleatorias..." << endl;
+        out_dijkstra << "Executando " << k_benchmark << " vezes (Tipo Fila: " << tipo_fila << ")..." << endl;
 
-        // Gerar k vértices de origem aleatórios
+        // --- 6b. Geração de Origens ---
         vector<int> origens_aleatorias;
-        std::mt19937 gen(42); // Seed fixa para reprodutibilidade
+        std::mt19937 gen(42); 
         std::uniform_int_distribution<> dis(1, n);
         for (int i = 0; i < k_benchmark; ++i) {
             origens_aleatorias.push_back(dis(gen));
         }
 
-        // Benchmark com Vetor
-        auto start_vetor = chrono::high_resolution_clock::now();
-        for (int s : origens_aleatorias) {
-            FilaComVetor fila_vetor;
-            volatile auto res = dijkstra(*grafo, s, fila_vetor); 
-        }
-        auto end_vetor = chrono::high_resolution_clock::now();
-        auto t_total_vetor_ms = chrono::duration_cast<chrono::milliseconds>(end_vetor - start_vetor).count();
-        double t_medio_vetor = (k_benchmark > 0) ? (double)t_total_vetor_ms / k_benchmark : 0.0;
+        // --- 6c. Execução dos Benchmarks ---
+        long long t_total_vetor_ms = 0;
+        double t_medio_vetor = 0.0;
+        long long t_total_heap_ms = 0;
+        double t_medio_heap = 0.0;
 
-        // Benchmark com Heap
-        auto start_heap = chrono::high_resolution_clock::now();
-        for (int s : origens_aleatorias) {
-            FilaComHeap fila_heap;
-            volatile auto res = dijkstra(*grafo, s, fila_heap);
+        if (tipo_fila == "vetor" || tipo_fila == "ambos") {
+            cout << "Executando benchmark com Vetor...\n";
+            auto start_vetor = chrono::high_resolution_clock::now();
+            for (int s : origens_aleatorias) {
+                FilaComVetor fila_vetor;
+                volatile auto res = dijkstra(*grafo, s, fila_vetor); 
+            }
+            auto end_vetor = chrono::high_resolution_clock::now();
+            t_total_vetor_ms = chrono::duration_cast<chrono::milliseconds>(end_vetor - start_vetor).count();
+            t_medio_vetor = (k_benchmark > 0) ? (double)t_total_vetor_ms / k_benchmark : 0.0;
         }
-        auto end_heap = chrono::high_resolution_clock::now();
-        auto t_total_heap_ms = chrono::duration_cast<chrono::milliseconds>(end_heap - start_heap).count();
-        double t_medio_heap = (k_benchmark > 0) ? (double)t_total_heap_ms / k_benchmark : 0.0;
 
-        // Tabela de Resultados do Benchmark
+        if (tipo_fila == "heap" || tipo_fila == "ambos") {
+            cout << "Executando benchmark com Heap...\n";
+            auto start_heap = chrono::high_resolution_clock::now();
+            for (int s : origens_aleatorias) {
+                FilaComHeap fila_heap;
+                volatile auto res = dijkstra(*grafo, s, fila_heap);
+            }
+            auto end_heap = chrono::high_resolution_clock::now();
+            t_total_heap_ms = chrono::duration_cast<chrono::milliseconds>(end_heap - start_heap).count();
+            t_medio_heap = (k_benchmark > 0) ? (double)t_total_heap_ms / k_benchmark : 0.0;
+        }
+
         RelatorioUtils::imprimir_tabela_benchmark(out_dijkstra, 
             t_total_vetor_ms, t_medio_vetor, 
             t_total_heap_ms, t_medio_heap);
 
 
-        // --- 6. Estudo de Caso 3.3: Rede de Colaboração ---
+        // --- 7. Estudo de Caso 3.3: Rede de Colaboração --- 
         out_dijkstra << "\n--- Estudo de Caso 3.3: Rede de Colaboracao ---" << endl;
-        out_dijkstra << "Este estudo de caso requer um grafo com identificadores (strings) para os vertices." << endl;
-        out_dijkstra << "A biblioteca atual so suporta vertices indexados por numeros inteiros (1 a N)." << endl;
-        out_dijkstra << "Para implementa-lo, seria necessario modificar a leitura do grafo para " << endl;
-        out_dijkstra << "mapear nomes (ex: 'Edsger W. Dijkstra') para IDs (ex: 1) e vice-versa." << endl;
+        
+        if (caminho_mapa.empty() || nome_para_id.empty()) {
+            out_dijkstra << "AVISO: Arquivo 'rede_colaboracao_vertices.txt' nao foi encontrado ou esta vazio.\n";
+            out_dijkstra << "       Este estudo de caso foi pulado." << endl;
+        
+        } else {
+            const string NOME_ORIGEM = "Edsger W. Dijkstra";
+            const vector<string> NOMES_DESTINO = {
+                "Alan M. Turing",     
+                "Joseph B. Kruskal",  
+                "Jon M. Kleinberg",   
+                "Éva Tardos",         
+                "Daniel Figueiredo"   
+            };
+            const double INFINITO = std::numeric_limits<double>::infinity();
+
+            int id_origem = -1;
+            if (nome_para_id.count(NOME_ORIGEM)) {
+                id_origem = nome_para_id.at(NOME_ORIGEM);
+            }
+
+            if (id_origem == -1) {
+                out_dijkstra << "Erro: Pesquisador de origem '" << NOME_ORIGEM << "' nao encontrado no mapeamento." << endl;
+            
+            } else {
+                out_dijkstra << "Origem: " << NOME_ORIGEM << " (ID: " << id_origem << ")\n\n";
+                
+                FilaComHeap fila_heap_estudo3; 
+                auto [dist, pai] = dijkstra(*grafo, id_origem, fila_heap_estudo3);
+
+                RelatorioUtils::imprimir_borda_tabela_nomes(out_dijkstra);
+                RelatorioUtils::imprimir_linha_tabela_nomes(out_dijkstra, "Destino", "Distancia", "Caminho Minimo");
+                RelatorioUtils::imprimir_borda_tabela_nomes(out_dijkstra);
+                
+                out_dijkstra << fixed << setprecision(4);
+
+                for (const string& nome_d : NOMES_DESTINO) {
+                    int id_d = -1;
+                    if (nome_para_id.count(nome_d)) {
+                        id_d = nome_para_id.at(nome_d);
+                    }
+
+                    string dist_str;
+                    string caminho_str_completo;
+                    
+                    if (id_d == -1) {
+                        dist_str = "N/A";
+                        caminho_str_completo = "Pesquisador '" + nome_d + "' nao encontrado no mapa.";
+                    } else if (dist[id_d] == INFINITO) {
+                        dist_str = "INF";
+                        caminho_str_completo = "Inalcançavel";
+                    } else {
+                        dist_str = to_string(dist[id_d]);
+                        caminho_str_completo = RelatorioUtils::get_caminho_str_com_nomes(id_origem, id_d, pai, id_para_nome);
+                    }
+                    
+
+                    string caminho_str_tabela; 
+                    bool foi_truncado = false;
+                    const int LIMITE_LARGURA_CAMINHO = 48;
+
+                    if (caminho_str_completo.length() > LIMITE_LARGURA_CAMINHO) {
+                        caminho_str_tabela = caminho_str_completo.substr(0, LIMITE_LARGURA_CAMINHO - 3) + "...";
+                        foi_truncado = true;
+                    } else {
+                        caminho_str_tabela = caminho_str_completo;
+                    }
+                    
+                    RelatorioUtils::imprimir_linha_tabela_nomes(out_dijkstra, nome_d, dist_str, caminho_str_tabela);
+
+                    if (foi_truncado) {
+                        out_dijkstra << " |    ... Caminho Completo: " << caminho_str_completo << endl;
+                    }
+                }
+                RelatorioUtils::imprimir_borda_tabela_nomes(out_dijkstra);
+            }
+        }
         
         out_dijkstra.close();
         cout << "\nRelatorio Dijkstra salvo com sucesso em '" << arquivo_saida_dijkstra << "'." << endl;
