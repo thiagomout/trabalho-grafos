@@ -21,7 +21,6 @@
 
 using namespace std;
 
-// ... [Classes Grafo, GrafoListaAdj, GrafoMatrizAdj -] ...
 // -------------------- Interface Abstrata do Grafo --------------------
 class Grafo {
 public:
@@ -48,7 +47,7 @@ public:
     vector<int> get_vizinhos(int u) const override {
         vector<int> vizinhos_ids;
         if (u > 0 && (size_t)u < adj.size()) {
-            vizinhos_ids.reserve(adj[u].size()); // linha de otimização de memória
+            vizinhos_ids.reserve(adj[u].size());
             for (const auto& par : adj[u]) {
                 vizinhos_ids.push_back(par.first);
             }
@@ -118,7 +117,6 @@ public:
 
 // -------------------- Leitura de dados --------------------
 
-// ... [Funções trim, ler_dados_grafo] ...
 string trim(const string& str) {
     size_t first = str.find_first_not_of(" \t\n\r");
     if (string::npos == first) {
@@ -128,7 +126,8 @@ string trim(const string& str) {
     return str.substr(first, (last - first + 1));
 }
 
-tuple<int, long long, vector<vector<pair<int, double>>>, bool> ler_dados_grafo(const string& caminho) {
+// [MODIFICADO] Adicionado parâmetro 'direcionado'
+tuple<int, long long, vector<vector<pair<int, double>>>, bool> ler_dados_grafo(const string& caminho, bool direcionado) {
     ifstream f(caminho);
     if (!f) {
         cerr << "Erro: Nao foi possivel abrir o arquivo: " << caminho << "\n";
@@ -150,13 +149,21 @@ tuple<int, long long, vector<vector<pair<int, double>>>, bool> ler_dados_grafo(c
         if (u > n || v > n || u < 1 || v < 1) continue;
 
         if (w < 0) tem_peso_negativo = true;
+        
+        // Aresta de ida (u -> v) sempre existe
         adj[u].push_back({v, w});
-        adj[v].push_back({u, w});
-        m++;
+        
+        // [MODIFICADO] Só adiciona a volta se NÃO for direcionado
+        if (!direcionado) {
+            adj[v].push_back({u, w});
+        }
+        
+        m++; // Conta a aresta/arco
     }
     return {n, m, adj, tem_peso_negativo};
 }
 
+// [RE-MODIFICADO] Versão mais robusta para ler 'ID,NOME'
 pair<map<string, int>, vector<string>> ler_mapeamento_vertices(const string& caminho_mapa, int n) {
     ifstream f(caminho_mapa);
     if (!f) {
@@ -168,89 +175,45 @@ pair<map<string, int>, vector<string>> ler_mapeamento_vertices(const string& cam
     vector<string> id_para_nome(n + 1, "NOME_DESCONHECIDO"); 
     string linha;
 
-    cout << "\n--- DEBUG: INICIANDO LEITURA (Modo Robusto) ---" << endl;
+    // cout << "\n--- DEBUG: INICIANDO LEITURA (Modo Robusto) ---" << endl;
 
-    // --- Checagem de BOM (Byte Order Mark) ---
-    // Lê os 3 primeiros bytes
     char bom[3];
     f.read(bom, 3);
     if (f.gcount() == 3 && (unsigned char)bom[0] == 0xEF && (unsigned char)bom[1] == 0xBB && (unsigned char)bom[2] == 0xBF) {
-        cout << "--- DEBUG: BOM UTF-8 detectado e removido." << endl;
+        // BOM encontrado e ignorado
     } else {
-        // Não era BOM, volta para o início
         f.seekg(0);
     }
 
     int linha_count = 0;
-    // Agora lê linha por linha
     while (getline(f, linha)) {
         linha_count++;
-        if (linha.empty() || linha == "\r") continue; // Pula linhas em branco
+        if (linha.empty() || linha == "\r") continue; 
 
-        // Encontra a primeira vírgula
         size_t pos_virgula = linha.find(',');
         if (pos_virgula == string::npos) {
-            // Linha mal formatada
-            if (linha_count < 10) cout << "  [DEBUG] AVISO: Linha " << linha_count << " mal formatada (sem virgula): [" << linha << "]" << endl;
             continue;
         }
 
-        // Extrai ID (string) e Nome (string)
         string id_str = linha.substr(0, pos_virgula);
         string nome_str = linha.substr(pos_virgula + 1);
 
-        // Converte ID para int
         int id;
         try {
             id = stoi(trim(id_str));
         } catch (...) {
-            if (linha_count < 10) cout << "  [DEBUG] AVISO: Linha " << linha_count << " tem ID invalido: [" << id_str << "]" << endl;
             continue;
         }
 
-        // Limpa o nome
         string nome_final = trim(nome_str);
         
         if (id > 0 && id <= n) {
             nome_para_id[nome_final] = id;
             id_para_nome[id] = nome_final;
         }
-        
-
     }
     
     cout << "Mapeamento lido. " << nome_para_id.size() << " nomes carregados de " << linha_count << " linhas.\n";
-    
-    vector<string> chaves_teste = {
-        "Edsger W. Dijkstra",
-        "Alan M. Turing",
-        "Joseph B. Kruskal",
-        "Éva Tardos",
-        "Daniel Figueiredo"
-    };
-
-    for (const string& key : chaves_teste) {
-        if (nome_para_id.count(key)) {
-            cout << "--- DEBUG: SUCESSO! Chave '" << key << "' FOI encontrada (ID: " << nome_para_id[key] << ")." << endl;
-        } else {
-            
-            // Tenta encontrar algo parecido para nos dar uma pista
-            string parte_key;
-            if (key.find(" ") != string::npos) {
-                parte_key = key.substr(key.find(" ") + 1); // Pega o sobrenome
-            } else {
-                parte_key = key;
-            }
-
-            for(const auto& par : nome_para_id) {
-                if (par.first.find(parte_key) != string::npos) {
-                    cout << "--- DEBUG: -> Encontrada chave similar: [\"" << par.first << "\"]" << endl;
-                    break; // Mostra só a primeira similar
-                }
-            }
-        }
-    }
-
     return {nome_para_id, id_para_nome};
 }
 
@@ -259,17 +222,10 @@ pair<map<string, int>, vector<string>> ler_mapeamento_vertices(const string& cam
 class FilaDePrioridade {
 public:
     virtual ~FilaDePrioridade() = default;
-
     virtual void inicializar(int num_vertices, int s) = 0;
-    
     virtual bool esta_vazia() const = 0;
-    
-    // Retorna o ID do vértice com a menor distância e o remove da fila.
     virtual int extrair_min() = 0;
-    
-    // Atualiza a distância de um vértice na fila (se for menor).
     virtual void inserir_ou_atualizar(int vertice, double nova_distancia) = 0;
-
     virtual double get_distancia(int v) const = 0;
 };
 
@@ -278,17 +234,15 @@ private:
     vector<double> dist;
     vector<bool> visitado;
     int n;
-    int restantes; // Contador de quantos vértices ainda faltam visitar
+    int restantes; 
 
 public:
     void inicializar(int num_vertices, int s) override {
         n = num_vertices;
         restantes = n;
         const double INFINITO = std::numeric_limits<double>::infinity();
-        
         dist.assign(n + 1, INFINITO);
         visitado.assign(n + 1, false);
-        
         dist[s] = 0.0;
     }
 
@@ -299,24 +253,20 @@ public:
     int extrair_min() override {
         double min_dist = std::numeric_limits<double>::infinity();
         int min_v = -1;
-
-        // Loop O(V): Encontra o vértice não-visitado com menor distância
         for (int v = 1; v <= n; ++v) {
             if (!visitado[v] && dist[v] < min_dist) {
                 min_dist = dist[v];
                 min_v = v;
             }
         }
-
         if (min_v != -1) {
-            visitado[min_v] = true; // "Remove" da fila
+            visitado[min_v] = true; 
             restantes--;
         }
-        return min_v; // Retorna -1 se todos os restantes forem infinitos
+        return min_v; 
     }
 
     void inserir_ou_atualizar(int vertice, double nova_distancia) override {
-        // alterar o valor no vetor de distâncias.
         dist[vertice] = nova_distancia;
     }
     double get_distancia(int v) const override {
@@ -326,8 +276,7 @@ public:
 
 class FilaComHeap : public FilaDePrioridade {
 private:
-// O 'greater' o torna um min-heap (ordena pelo menor primeiro).
-    using Par = pair<double, int>; // {distancia, vertice}
+    using Par = pair<double, int>; 
     std::priority_queue<Par, vector<Par>, greater<Par>> heap;
     vector<double> dist;
     int n;
@@ -348,12 +297,11 @@ public:
         while (!heap.empty()) {
             auto [d, v] = heap.top();
             heap.pop();
-            // Verifica se é a distância mais atual
             if (d == dist[v]) {
                 return v;
             }
         }
-        return -1; // Fila vazia
+        return -1; 
     }
     void inserir_ou_atualizar(int vertice, double nova_distancia) override {
         if (nova_distancia < dist[vertice]) {
@@ -376,7 +324,7 @@ pair<vector<double>, vector<int>> dijkstra(const Grafo& grafo, int s, FilaDePrio
 
     while (!fila.esta_vazia()) {
         int u = fila.extrair_min();
-        if (u == -1 || fila.get_distancia(u) == INFINITO) break; // Todos os restantes são infinitos
+        if (u == -1 || fila.get_distancia(u) == INFINITO) break;
 
         for (const auto& par : grafo.get_vizinhos_com_peso(u)) {
             int v = par.first;
@@ -394,6 +342,80 @@ pair<vector<double>, vector<int>> dijkstra(const Grafo& grafo, int s, FilaDePrio
         dist_final[v] = fila.get_distancia(v);
     }
     return {dist_final, pai};
+}
+
+/**
+ * @brief Bellman-Ford (SPFA - Shortest Path Faster Algorithm).
+ * Calcula distâncias de TODOS os vértices para um DESTINO 't'.
+ * Implementa as Otimizações 1 e 2 solicitadas.
+ */
+pair<bool, pair<vector<double>, vector<int>>> bellman_ford(const Grafo& grafo, int t) {
+    int n = grafo.get_num_vertices();
+    const double INFINITO = std::numeric_limits<double>::infinity();
+    
+    // Estruturas de retorno
+    vector<double> dist(n + 1, INFINITO);
+    vector<int> pai(n + 1, -1); 
+    
+    // 1. Construção do Grafo Invertido
+    // Necessário porque queremos ir de TODOS para UM. O algoritmo roda "de trás para frente".
+    vector<vector<pair<int, double>>> adj_inv(n + 1);
+    for (int u = 1; u <= n; ++u) {
+        for (auto& par : grafo.get_vizinhos_com_peso(u)) {
+            int v = par.first;
+            double w = par.second;
+            // Se existe aresta u->v original, guardamos v->u no inverso
+            adj_inv[v].push_back({u, w});
+        }
+    }
+
+    // 2. Inicialização das Estruturas do SPFA
+    queue<int> fila;
+    vector<bool> na_fila(n + 1, false); 
+    
+    // Vetor para controlar a profundidade do caminho (para detectar ciclo negativo)
+    // Se um caminho tiver mais que N arestas, existe um ciclo.
+    vector<int> arestas_no_caminho(n + 1, 0); 
+
+    // Inicializa o destino (que age como fonte na busca reversa)
+    dist[t] = 0.0;
+    fila.push(t);
+    na_fila[t] = true;
+
+    // 3. Loop Principal (SPFA)
+    while (!fila.empty()) {
+        int v = fila.front(); 
+        fila.pop();
+        na_fila[v] = false;
+
+        // Relaxamento Reverso: Olhamos quem chega em 'v' (u -> v)
+        for (auto& par : adj_inv[v]) {
+            int u = par.first;     // Vizinho que aponta para v
+            double peso = par.second; // Peso da aresta u->v
+
+            // Se achamos um caminho melhor para 't' saindo de 'u' passando por 'v'
+            if (dist[u] > peso + dist[v]) {
+                dist[u] = peso + dist[v];
+                pai[u] = v; // O "pai" de u é v (pois estamos indo em direção a t)
+                
+                // Detecção de Ciclo Negativo:
+                // O caminho até u agora tem 1 aresta a mais que o caminho até v.
+                arestas_no_caminho[u] = arestas_no_caminho[v] + 1;
+                
+                if (arestas_no_caminho[u] > n) {
+                     return {true, {dist, pai}}; // Ciclo negativo detectado
+                }
+
+                // Se u não está na fila para ser processado, adiciona
+                if (!na_fila[u]) {
+                    fila.push(u);
+                    na_fila[u] = true;
+                }
+            }
+        }
+    }
+
+    return {false, {dist, pai}};
 }
 
 pair<vector<int>, vector<int>> bfs(const Grafo& grafo, int s) {
@@ -424,7 +446,7 @@ pair<vector<int>, vector<int>> dfs(const Grafo& grafo, int s) {
     vector<int> pai(n + 1, -1), nivel(n + 1, -1);
     if (s < 1 || s > n) return {pai, nivel};
 
-    stack<pair<int, int>> pilha; // {vértice, nível}
+    stack<pair<int, int>> pilha; 
     vector<bool> visitado(n + 1, false);
 
     pilha.push({s, 0});
@@ -551,15 +573,11 @@ void pausa(const string& msg) {
     cout << endl;
 }
 
-
-// -------------------- Utilitários de Saída/Relatório --------------------
 namespace RelatorioUtils {
-
     string get_caminho_str(int origem, int destino, const vector<int>& pai) {
         if (pai[destino] == -1 && destino != origem) {
             return (destino == origem) ? to_string(origem) : "Nenhum";
         }
-
         stringstream ss;
         stack<int> caminho;
         int atual = destino;
@@ -567,7 +585,6 @@ namespace RelatorioUtils {
             caminho.push(atual);
             atual = pai[atual];
         }
-        
         while (!caminho.empty()) {
             ss << caminho.top();
             caminho.pop();
@@ -582,7 +599,6 @@ namespace RelatorioUtils {
         if (pai[destino_id] == -1 && destino_id != origem_id) {
             return "Nenhum";
         }
-
         stringstream ss;
         stack<int> caminho_ids;
         int atual = destino_id;
@@ -590,17 +606,13 @@ namespace RelatorioUtils {
             caminho_ids.push(atual);
             atual = pai[atual];
         }
-        
         while (!caminho_ids.empty()) {
             int id_atual = caminho_ids.top();
             caminho_ids.pop();
-            
             string nome = (id_atual > 0 && (size_t)id_atual < id_para_nome.size()) 
                             ? id_para_nome[id_atual] 
                             : ("ID(" + to_string(id_atual) + ")");
-            
             ss << nome;
-            
             if (!caminho_ids.empty()) {
                 ss << " -> ";
             }
@@ -619,19 +631,15 @@ namespace RelatorioUtils {
     }
 
     void imprimir_linha_tabela_nomes(ostream& out, const string& col1, const string& col2, const string& col3) {
-        out << " | " << left << setw(25) << col1 // Coluna 1 (Nome) aumentada
-            << " | " << left << setw(18) << col2 // Coluna 2 (Dist)
-            << " | " << left << setw(50) << col3 << " |" << endl; // Coluna 3 (Caminho) aumentada
+        out << " | " << left << setw(25) << col1 
+            << " | " << left << setw(18) << col2 
+            << " | " << left << setw(50) << col3 << " |" << endl; 
     }
 
     void imprimir_borda_tabela_nomes(ostream& out) {
         out << " +---------------------------+--------------------+----------------------------------------------------+" << endl;
     }
 
-
-    /**
-     * @brief Imprime a tabela de resultados do benchmark de performance.
-     */
     void imprimir_tabela_benchmark(ostream& out, 
                                      long long t_total_vetor_ms, double t_medio_vetor, 
                                      long long t_total_heap_ms, double t_medio_heap) 
@@ -639,22 +647,19 @@ namespace RelatorioUtils {
         out << "   +------------------+-------------------+------------------+" << endl;
         out << "   | Implementacao    | Tempo Total (ms)  | Tempo Medio (ms) |" << endl;
         out << "   +------------------+-------------------+------------------+" << endl;
-        out << fixed << setprecision(4); // Garante a formatação correta dos 'doubles'
+        out << fixed << setprecision(4); 
         
-        // Só imprime a linha do Vetor se ele foi executado
         if (t_total_vetor_ms > 0 || t_medio_vetor > 0.0) {
             out << "   | Vetor (O(V^2))   | " << left << setw(17) << t_total_vetor_ms 
                 << " | " << left << setw(16) << t_medio_vetor << " |" << endl;
         }
-        // Só imprime a linha do Heap se ele foi executado
         if (t_total_heap_ms > 0 || t_medio_heap > 0.0) {
             out << "   | Heap (O(E log V))| " << left << setw(17) << t_total_heap_ms 
                 << " | " << left << setw(16) << t_medio_heap << " |" << endl;
         }
         out << "   +------------------+-------------------+------------------+" << endl;
     }
-
-} // fim do namespace RelatorioUtils
+}
 
 // -------------------- Driver --------------------
 int main(int argc, char* argv[]) {
@@ -663,8 +668,8 @@ int main(int argc, char* argv[]) {
 
     if (argc < 4) {
         cerr << "Erro: Uso incorreto.\n";
-        cerr << "Modo Relatorio: ./estudos <lista|matriz> <arquivo.txt> relatorio\n";
-        cerr << "Modo Dijkstra:  ./estudos <lista|matriz> <arquivo.txt> dijkstra [k_benchmark] [vetor|heap|ambos]\n";
+        cerr << "Modo Relatorio: ./estudos <lista|matriz> <arquivo.txt> relatorio [direcionado]\n";
+        cerr << "Modo Dijkstra:  ./estudos <lista|matriz> <arquivo.txt> dijkstra [k_benchmark] [vetor|heap|ambos] [direcionado]\n";
         return 1;
     }
     string tipo_representacao = argv[1];
@@ -675,7 +680,16 @@ int main(int argc, char* argv[]) {
     string caminho_arquivo = argv[2];
     string modo = argv[3];
 
-    // --- Extração do Nome Base do Arquivo ---
+    // --- [NOVO] Verifica se é direcionado (Tarefa 1) ---
+    bool eh_direcionado = false;
+    for (int i = 1; i < argc; ++i) {
+        string arg = argv[i];
+        if (arg == "direcionado") {
+            eh_direcionado = true;
+            break;
+        }
+    }
+
     string nome_base_arquivo;
     size_t pos_barra = caminho_arquivo.find_last_of("/\\");
     if (pos_barra != string::npos) {
@@ -691,7 +705,14 @@ int main(int argc, char* argv[]) {
 
     // --- 2. Leitura do Grafo ---
     cout << "Lendo dados do grafo de '" << caminho_arquivo << "'...\n";
-    auto [n, m, adj_data, tem_peso_negativo] = ler_dados_grafo(caminho_arquivo);
+    if (eh_direcionado) {
+        cout << "-> MODO DIRECIONADO ATIVADO.\n";
+    } else {
+        cout << "-> MODO NAO-DIRECIONADO (Padrao).\n";
+    }
+
+    // [MODIFICADO] Passa o flag eh_direcionado
+    auto [n, m, adj_data, tem_peso_negativo] = ler_dados_grafo(caminho_arquivo, eh_direcionado);
     
     unique_ptr<Grafo> grafo;
     if (tipo_representacao == "lista") {
@@ -701,12 +722,9 @@ int main(int argc, char* argv[]) {
         grafo = make_unique<GrafoMatrizAdj>(n, m, adj_data);
         cout << "Grafo carregado com representacao em MATRIZ de adjacencia.\n";
     }
-    cout << "Vertices: " << n << ", Arestas: " << m << endl;
+    cout << "Vertices: " << n << ", Arestas/Arcos: " << m << endl;
 
 
-    // ======================================================================
-    // --- MODO 1: Trabalho1 (BFS/DFS, Diâmetro, Componentes) ---
-    // ======================================================================
     if (modo == "relatorio") {
         const string arquivo_saida = "Relatorio_" + nome_base_arquivo + ".txt";
         
@@ -775,6 +793,7 @@ int main(int argc, char* argv[]) {
         ofstream out(arquivo_saida);
         out << "=== RELATORIO DE ANALISE DE GRAFO ===\n\n";
         out << "Arquivo de entrada: " << caminho_arquivo << "\n";
+        out << "Tipo: " << (eh_direcionado ? "Direcionado" : "Nao-Direcionado") << "\n";
         out << "Representacao utilizada: " << tipo_representacao << "\n\n";
         out << "--- Informacoes Basicas ---\n";
         out << "Vertices: " << n << "\n";
@@ -823,9 +842,6 @@ int main(int argc, char* argv[]) {
         cout << "\nRelatorio salvo em '" << arquivo_saida << "'.\n";
 
     } 
-    // ======================================================================
-    // --- MODO 2: ESTUDOS DE CASO DIJKSTRA ---
-    // ======================================================================
     else if (modo == "dijkstra") {
         
         map<string, int> nome_para_id;
@@ -851,10 +867,9 @@ int main(int argc, char* argv[]) {
             }
         } catch (const std::filesystem::filesystem_error& e) {
             cerr << "Erro de filesystem ao tentar localizar 'rede_colaboracao_vertices.txt': " << e.what() << "\n";
-            caminho_mapa = ""; // Flag para pular
+            caminho_mapa = ""; 
         }
         
-        // --- 4. Verificação de Pesos Negativos ---
         if (tem_peso_negativo) {
             string msg_erro = "AVISO: O grafo possui arestas com peso negativo.\nA biblioteca ainda nao implementa caminhos minimos com pesos negativos.";
             cout << "\n------------------------------------------------------------------\n" << msg_erro << "\n------------------------------------------------------------------" << endl;
@@ -862,7 +877,6 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
-        // --- Abrir Arquivo de Saída ---
         const string arquivo_saida_dijkstra = "Dijkstra_" + nome_base_arquivo + ".txt";
         ofstream out_dijkstra(arquivo_saida_dijkstra);
         if (!out_dijkstra) {
@@ -872,13 +886,12 @@ int main(int argc, char* argv[]) {
 
         cout << "Iniciando estudos de caso Dijkstra... (Resultados serao salvos em " << arquivo_saida_dijkstra << ")" << endl;
         
-        // Cabeçalho do arquivo
         out_dijkstra << "=== RELATORIO DE ANALISE DIJKSTRA ===\n\n";
         out_dijkstra << "Arquivo de entrada: " << caminho_arquivo << "\n";
+        out_dijkstra << "Tipo: " << (eh_direcionado ? "Direcionado" : "Nao-Direcionado") << "\n";
         out_dijkstra << "Representacao utilizada: " << tipo_representacao << "\n";
         out_dijkstra << "Vertices: " << n << ", Arestas: " << m << "\n";
 
-        // --- 5. Estudo de Caso 3.1: Distância (10 -> X) ---
         out_dijkstra << "\n--- Estudo de Caso 3.1: Distancias e Caminhos (IDs) ---" << endl;
         int origem_fixa = 10;
         if (origem_fixa > n) {
@@ -906,7 +919,6 @@ int main(int argc, char* argv[]) {
                 
                 string caminho_str_tabela;
                 bool foi_truncado = false;
-                // O setw é 35, 33 deixa espaço para "..."
                 const int LIMITE_LARGURA_CAMINHO_IDS = 33; 
 
                 if (caminho_str_completo.length() > LIMITE_LARGURA_CAMINHO_IDS) {
@@ -916,41 +928,41 @@ int main(int argc, char* argv[]) {
                     caminho_str_tabela = caminho_str_completo;
                 }
 
-                // 1. Imprime a linha da tabela (sempre alinhada)
                 RelatorioUtils::imprimir_linha_tabela(out_dijkstra, to_string(d), dist_str, caminho_str_tabela);
 
-                // 2. Se foi truncado, imprime o caminho completo logo abaixo
                 if (foi_truncado) {
-                    // Indenta a linha para ficar claro que é uma continuação
                     out_dijkstra << "   |    ... Caminho Completo: " << caminho_str_completo << endl;
                 }
             }
             RelatorioUtils::imprimir_borda_tabela_dijkstra(out_dijkstra);
         }
+        
 
-        // --- 6. Estudo de Caso 3.2: Benchmark Dijkstra (Vetor vs Heap) ---
+        int k_benchmark = 100; 
+        string tipo_fila = "ambos"; 
         
-        // --- 6a. Parse dos Argumentos ---
-        int k_benchmark = 100; // Default K
-        string tipo_fila = "ambos"; // Default tipo
-        
-        if (argc == 5) { 
-            string arg4 = argv[4];
-            try {
-                k_benchmark = stoi(arg4);
-            } catch (...) {
-                tipo_fila = arg4;
-            }
-        } else if (argc >= 6) { 
-            string arg4 = argv[4];
-            string arg5 = argv[5];
-            
-            try {
-                k_benchmark = stoi(arg4);
-            } catch (...) {
-                cerr << "Aviso: k_benchmark invalido ('" << arg4 << "'). Usando default (100).\n";
-            }
-            tipo_fila = arg5;
+        // Parsing inteligente dos argumentos opcionais do Dijkstra
+        // Ignora "direcionado" pois já foi tratado
+        if (argc >= 5) {
+             // Tenta encontrar k_benchmark e tipo_fila nos argumentos restantes
+             // que NÃO sejam "direcionado"
+             vector<string> args_restantes;
+             for(int i=4; i<argc; ++i) {
+                 if(string(argv[i]) != "direcionado") {
+                     args_restantes.push_back(argv[i]);
+                 }
+             }
+             
+             if(args_restantes.size() >= 1) {
+                 try {
+                    k_benchmark = stoi(args_restantes[0]);
+                 } catch(...) {
+                    tipo_fila = args_restantes[0];
+                 }
+             }
+             if(args_restantes.size() >= 2) {
+                 tipo_fila = args_restantes[1];
+             }
         }
 
         if (tipo_fila != "vetor" && tipo_fila != "heap" && tipo_fila != "ambos") {
@@ -961,7 +973,6 @@ int main(int argc, char* argv[]) {
         out_dijkstra << "\n--- Estudo de Caso 3.2: Benchmark de Performance (Dijkstra) ---" << endl;
         out_dijkstra << "Executando " << k_benchmark << " vezes (Tipo Fila: " << tipo_fila << ")..." << endl;
 
-        // --- 6b. Geração de Origens ---
         vector<int> origens_aleatorias;
         std::mt19937 gen(42); 
         std::uniform_int_distribution<> dis(1, n);
@@ -969,7 +980,6 @@ int main(int argc, char* argv[]) {
             origens_aleatorias.push_back(dis(gen));
         }
 
-        // --- 6c. Execução dos Benchmarks ---
         long long t_total_vetor_ms = 0;
         double t_medio_vetor = 0.0;
         long long t_total_heap_ms = 0;
@@ -1004,7 +1014,6 @@ int main(int argc, char* argv[]) {
             t_total_heap_ms, t_medio_heap);
 
 
-        // --- 7. Estudo de Caso 3.3: Rede de Colaboração --- 
         out_dijkstra << "\n--- Estudo de Caso 3.3: Rede de Colaboracao ---" << endl;
         
         if (caminho_mapa.empty() || nome_para_id.empty()) {
@@ -1062,7 +1071,6 @@ int main(int argc, char* argv[]) {
                         caminho_str_completo = RelatorioUtils::get_caminho_str_com_nomes(id_origem, id_d, pai, id_para_nome);
                     }
                     
-
                     string caminho_str_tabela; 
                     bool foi_truncado = false;
                     const int LIMITE_LARGURA_CAMINHO = 48;
@@ -1089,8 +1097,89 @@ int main(int argc, char* argv[]) {
 
     }
     // ======================================================================
-    // --- MODO INVÁLIDO ---
+    // --- MODO 3: BELLMAN-FORD (Tarefa 3) ---
     // ======================================================================
+    else if (modo == "bellman-ford") {
+        
+        // O enunciado pede:
+        // 1. Distância de 10, 20, 30 para 100.
+        // 2. Tempo médio de 10 rodadas.
+        
+        int destino_t = 100;
+        if (n < 100) {
+            cout << "Aviso: O grafo tem menos de 100 vertices. Mudando destino para " << n << ".\n";
+            destino_t = n;
+        }
+
+        cout << "Executando Bellman-Ford (Todos -> " << destino_t << ")...\n";
+        cout << "Rodando 10 vezes para calcular tempo medio...\n";
+
+        // Variáveis para armazenar resultado
+        vector<double> dist_final;
+        vector<int> pai_final;
+        bool ciclo_detectado = false;
+
+        // Benchmark
+        auto start = chrono::high_resolution_clock::now();
+        for (int i = 0; i < 10; ++i) {
+            auto resultado = bellman_ford(*grafo, destino_t);
+            
+            // Na última rodada, salvamos os dados para imprimir
+            if (i == 9) {
+                ciclo_detectado = resultado.first;
+                dist_final = resultado.second.first;
+                pai_final = resultado.second.second;
+            }
+        }
+        auto end = chrono::high_resolution_clock::now();
+        
+        // Cálculos de tempo
+        long long tempo_total_ms = chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        double tempo_medio_s = (double)tempo_total_ms / 10.0 / 1000.0; // ms -> s
+
+        // --- SAÍDA DOS DADOS ---
+
+        if (ciclo_detectado) {
+            cout << "\nERRO CRITICO: Ciclo negativo detectado no grafo!\n";
+            cout << "As distancias calculadas nao sao confiaveis.\n";
+        } else {
+            cout << "\n--- Estudo 3.1: Distancias para o vertice " << destino_t << " ---\n";
+            RelatorioUtils::imprimir_borda_tabela_dijkstra(cout); // Reusando a borda
+            RelatorioUtils::imprimir_linha_tabela(cout, "Origem", "Distancia", "Status");
+            RelatorioUtils::imprimir_borda_tabela_dijkstra(cout);
+            
+            vector<int> origens = {10, 20, 30};
+            const double INF = std::numeric_limits<double>::infinity();
+
+            for (int u : origens) {
+                if (u > n) continue;
+
+                string d_str = (dist_final[u] == INF) ? "INF" : to_string(dist_final[u]);
+                string status = (dist_final[u] == INF) ? "Inalcancavel" : "OK";
+                
+                RelatorioUtils::imprimir_linha_tabela(cout, to_string(u), d_str, status);
+            }
+            RelatorioUtils::imprimir_borda_tabela_dijkstra(cout);
+        }
+
+        cout << "\n--- Estudo 3.2: Performance ---\n";
+        cout << "Tempo medio de execucao: " << fixed << setprecision(6) << tempo_medio_s << " segundos.\n";
+        
+        // Salvar num arquivo também, se quiser
+        string arquivo_saida = "Relatorio_BellmanFord_" + nome_base_arquivo + ".txt";
+        ofstream out_bf(arquivo_saida);
+        out_bf << "Resultados Bellman-Ford (" << nome_base_arquivo << ")\n";
+        out_bf << "Destino: " << destino_t << "\n";
+        out_bf << "Tempo Medio: " << tempo_medio_s << " s\n";
+        if(!ciclo_detectado) {
+             out_bf << "Distancia 10->" << destino_t << ": " << dist_final[10] << "\n";
+             out_bf << "Distancia 20->" << destino_t << ": " << dist_final[20] << "\n";
+             out_bf << "Distancia 30->" << destino_t << ": " << dist_final[30] << "\n";
+        }
+        out_bf.close();
+        cout << "Relatorio salvo em " << arquivo_saida << endl;
+    }
+
     else {
         cerr << "Erro: Modo '" << modo << "' invalido. Use 'relatorio' ou 'dijkstra'.\n";
         return 1;
