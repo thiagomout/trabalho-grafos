@@ -1,0 +1,19 @@
+=== RELATORIO ESTUDO DE CASO (Bellman-Ford vs Dijkstra) ===
+Grafo: grafo_W_4 (N=1000000, M=30999978)
+Destino Fixo: 100
+
+[Tabela 1] Resultados Bellman-Ford
+Tempo Medio: 4.268000 s
+Origem 10 -> Destino 100: 9.040000
+Origem 20 -> Destino 100: 8.830000
+Origem 30 -> Destino 100: 9.230000
+
+[Tabela 2] Comparacao de Distancias
+Origem 10: BF=9.040000 | Dijkstra=9.040000
+Origem 20: BF=8.830000 | Dijkstra=8.830000
+Origem 30: BF=9.230000 | Dijkstra=9.230000
+
+[Tabela 3] Tempos Medios
+Bellman-Ford: 4.268000 s
+Dijkstra: 1.151500 s
+Conclusao: Dijkstra foi 3.706470x mais rapido.

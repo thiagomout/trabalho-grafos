@@ -1,0 +1,12 @@
+=== RELATORIO ESTUDO DE CASO (Bellman-Ford vs Dijkstra) ===
+Grafo: grafo_W_1 (N=25000, M=549953)
+Destino Fixo: 100
+
+!!! CICLO NEGATIVO DETECTADO !!!
+[Tabela 1] Resultados Bellman-Ford
+Tempo Medio: 32.715000 s
+Origem 10 -> Destino 100: -58742.080000
+Origem 20 -> Destino 100: -58734.040000
+Origem 30 -> Destino 100: -58736.870000
+
+AVISO: Grafo com pesos negativos. Dijkstra pulado.

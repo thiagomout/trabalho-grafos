@@ -126,7 +126,6 @@ string trim(const string& str) {
     return str.substr(first, (last - first + 1));
 }
 
-// [MODIFICADO] Adicionado parâmetro 'direcionado'
 tuple<int, long long, vector<vector<pair<int, double>>>, bool> ler_dados_grafo(const string& caminho, bool direcionado) {
     ifstream f(caminho);
     if (!f) {
@@ -153,7 +152,7 @@ tuple<int, long long, vector<vector<pair<int, double>>>, bool> ler_dados_grafo(c
         // Aresta de ida (u -> v) sempre existe
         adj[u].push_back({v, w});
         
-        // [MODIFICADO] Só adiciona a volta se NÃO for direcionado
+        // Só adiciona a volta se NÃO for direcionado
         if (!direcionado) {
             adj[v].push_back({u, w});
         }
@@ -573,6 +572,27 @@ void pausa(const string& msg) {
     cout << endl;
 }
 
+// Função auxiliar para criar um grafo com arestas invertidas (para o Dijkstra)
+unique_ptr<Grafo> criar_grafo_invertido(const Grafo& grafo_original) {
+    int n = grafo_original.get_num_vertices();
+    long long m = grafo_original.get_num_arestas();
+    
+    // Cria nova lista de adjacência
+    vector<vector<pair<int, double>>> adj_inv(n + 1);
+    
+    for (int u = 1; u <= n; ++u) {
+        for (auto& par : grafo_original.get_vizinhos_com_peso(u)) {
+            int v = par.first;
+            double w = par.second;
+            // Inverte a direção: aresta original u->v vira v->u
+            adj_inv[v].push_back({u, w});
+        }
+    }
+    
+    // Retorna como GrafoListaAdj (mais eficiente para Dijkstra com Heap)
+    return make_unique<GrafoListaAdj>(n, m, move(adj_inv));
+}
+
 namespace RelatorioUtils {
     string get_caminho_str(int origem, int destino, const vector<int>& pai) {
         if (pai[destino] == -1 && destino != origem) {
@@ -659,6 +679,33 @@ namespace RelatorioUtils {
         }
         out << "   +------------------+-------------------+------------------+" << endl;
     }
+    void salvar_arvore_em_arquivo(const vector<int>& pai, int n, const string& nome_base) {
+        string nome_arquivo = "Arvore_Caminhos_" + nome_base + ".txt";
+        ofstream file(nome_arquivo);
+        
+        if (!file.is_open()) {
+            cerr << "Erro ao salvar a arvore." << endl;
+            return;
+        }
+
+        file << "=== ARVORE DE CAMINHOS MINIMOS ===\n";
+        file << "Formato: [Vertice] -> [Proximo No] (em direcao ao destino)\n";
+        file << "-------------------------------------------------\n";
+
+        long long arestas_conta = 0;
+        for (int u = 1; u <= n; ++u) {
+            // Se 'u' tem um pai (sucessor), existe uma aresta na árvore
+            if (pai[u] != -1) {
+                file << u << " -> " << pai[u] << "\n";
+                arestas_conta++;
+            }
+        }
+        
+        file << "-------------------------------------------------\n";
+        file << "Total de arestas na arvore: " << arestas_conta << "\n";
+        file.close();
+        cout << "Arvore de caminhos minimos salva em '" << nome_arquivo << "'.\n";
+    }
 }
 
 // -------------------- Driver --------------------
@@ -670,6 +717,8 @@ int main(int argc, char* argv[]) {
         cerr << "Erro: Uso incorreto.\n";
         cerr << "Modo Relatorio: ./estudos <lista|matriz> <arquivo.txt> relatorio [direcionado]\n";
         cerr << "Modo Dijkstra:  ./estudos <lista|matriz> <arquivo.txt> dijkstra [k_benchmark] [vetor|heap|ambos] [direcionado]\n";
+        cerr << "Modo Bellman:   ./estudos <lista|matriz> <arquivo.txt> bellman-ford [direcionado]\n";
+        cerr << "Modo Estudo:    ./estudos <lista|matriz> <arquivo.txt> estudo_caso [direcionado]\n";
         return 1;
     }
     string tipo_representacao = argv[1];
@@ -680,7 +729,7 @@ int main(int argc, char* argv[]) {
     string caminho_arquivo = argv[2];
     string modo = argv[3];
 
-    // --- [NOVO] Verifica se é direcionado (Tarefa 1) ---
+    //  Verifica se é direcionado ---
     bool eh_direcionado = false;
     for (int i = 1; i < argc; ++i) {
         string arg = argv[i];
@@ -711,7 +760,7 @@ int main(int argc, char* argv[]) {
         cout << "-> MODO NAO-DIRECIONADO (Padrao).\n";
     }
 
-    // [MODIFICADO] Passa o flag eh_direcionado
+    // Passa o flag eh_direcionado
     auto [n, m, adj_data, tem_peso_negativo] = ler_dados_grafo(caminho_arquivo, eh_direcionado);
     
     unique_ptr<Grafo> grafo;
@@ -725,6 +774,9 @@ int main(int argc, char* argv[]) {
     cout << "Vertices: " << n << ", Arestas/Arcos: " << m << endl;
 
 
+    // ======================================================================
+    // --- MODO 1: Trabalho1 (BFS/DFS, Diâmetro, Componentes) ---
+    // ======================================================================
     if (modo == "relatorio") {
         const string arquivo_saida = "Relatorio_" + nome_base_arquivo + ".txt";
         
@@ -842,6 +894,9 @@ int main(int argc, char* argv[]) {
         cout << "\nRelatorio salvo em '" << arquivo_saida << "'.\n";
 
     } 
+    // ======================================================================
+    // --- MODO 2: ESTUDOS DE CASO DIJKSTRA ---
+    // ======================================================================
     else if (modo == "dijkstra") {
         
         map<string, int> nome_para_id;
@@ -936,13 +991,11 @@ int main(int argc, char* argv[]) {
             }
             RelatorioUtils::imprimir_borda_tabela_dijkstra(out_dijkstra);
         }
-        
 
         int k_benchmark = 100; 
         string tipo_fila = "ambos"; 
         
         // Parsing inteligente dos argumentos opcionais do Dijkstra
-        // Ignora "direcionado" pois já foi tratado
         if (argc >= 5) {
              // Tenta encontrar k_benchmark e tipo_fila nos argumentos restantes
              // que NÃO sejam "direcionado"
@@ -1097,13 +1150,9 @@ int main(int argc, char* argv[]) {
 
     }
     // ======================================================================
-    // --- MODO 3: BELLMAN-FORD (Tarefa 3) ---
+    // --- MODO 3: BELLMAN-FORD (Tarefa 3 - Simples) ---
     // ======================================================================
     else if (modo == "bellman-ford") {
-        
-        // O enunciado pede:
-        // 1. Distância de 10, 20, 30 para 100.
-        // 2. Tempo médio de 10 rodadas.
         
         int destino_t = 100;
         if (n < 100) {
@@ -1114,17 +1163,14 @@ int main(int argc, char* argv[]) {
         cout << "Executando Bellman-Ford (Todos -> " << destino_t << ")...\n";
         cout << "Rodando 10 vezes para calcular tempo medio...\n";
 
-        // Variáveis para armazenar resultado
         vector<double> dist_final;
         vector<int> pai_final;
         bool ciclo_detectado = false;
 
-        // Benchmark
         auto start = chrono::high_resolution_clock::now();
         for (int i = 0; i < 10; ++i) {
             auto resultado = bellman_ford(*grafo, destino_t);
             
-            // Na última rodada, salvamos os dados para imprimir
             if (i == 9) {
                 ciclo_detectado = resultado.first;
                 dist_final = resultado.second.first;
@@ -1133,18 +1179,15 @@ int main(int argc, char* argv[]) {
         }
         auto end = chrono::high_resolution_clock::now();
         
-        // Cálculos de tempo
         long long tempo_total_ms = chrono::duration_cast<chrono::milliseconds>(end - start).count();
-        double tempo_medio_s = (double)tempo_total_ms / 10.0 / 1000.0; // ms -> s
-
-        // --- SAÍDA DOS DADOS ---
+        double tempo_medio_s = (double)tempo_total_ms / 10.0 / 1000.0; 
 
         if (ciclo_detectado) {
             cout << "\nERRO CRITICO: Ciclo negativo detectado no grafo!\n";
             cout << "As distancias calculadas nao sao confiaveis.\n";
         } else {
             cout << "\n--- Estudo 3.1: Distancias para o vertice " << destino_t << " ---\n";
-            RelatorioUtils::imprimir_borda_tabela_dijkstra(cout); // Reusando a borda
+            RelatorioUtils::imprimir_borda_tabela_dijkstra(cout); 
             RelatorioUtils::imprimir_linha_tabela(cout, "Origem", "Distancia", "Status");
             RelatorioUtils::imprimir_borda_tabela_dijkstra(cout);
             
@@ -1165,7 +1208,6 @@ int main(int argc, char* argv[]) {
         cout << "\n--- Estudo 3.2: Performance ---\n";
         cout << "Tempo medio de execucao: " << fixed << setprecision(6) << tempo_medio_s << " segundos.\n";
         
-        // Salvar num arquivo também, se quiser
         string arquivo_saida = "Relatorio_BellmanFord_" + nome_base_arquivo + ".txt";
         ofstream out_bf(arquivo_saida);
         out_bf << "Resultados Bellman-Ford (" << nome_base_arquivo << ")\n";
@@ -1180,8 +1222,159 @@ int main(int argc, char* argv[]) {
         cout << "Relatorio salvo em " << arquivo_saida << endl;
     }
 
+    // ======================================================================
+    // --- MODO 4: ESTUDO DE CASO COMPLETO (Tarefa 3 - Comparativo) ---
+    // ======================================================================
+    else if (modo == "estudo_caso") {
+        
+        string arquivo_saida_estudo = "Relatorio_EstudoCaso_" + nome_base_arquivo + ".txt";
+        ofstream out_estudo(arquivo_saida_estudo);
+
+        int destino_t = 100;
+        if (n < 100) {
+            cout << "Aviso: Grafo pequeno (n=" << n << "). Mudando destino para " << n << ".\n";
+            destino_t = n;
+        }
+        vector<int> origens = {10, 20, 30};
+
+        // Cabeçalho do Arquivo
+        out_estudo << "=== RELATORIO ESTUDO DE CASO (Bellman-Ford vs Dijkstra) ===\n";
+        out_estudo << "Grafo: " << nome_base_arquivo << " (N=" << n << ", M=" << m << ")\n";
+        out_estudo << "Destino Fixo: " << destino_t << "\n\n";
+
+        // ---------------------------------------------------------
+        // PARTE A: BELLMAN-FORD (Otimizado SPFA)
+        // ---------------------------------------------------------
+        cout << "\n=== 1. Executando Bellman-Ford (SPFA) ===" << endl;
+        cout << "Rodando 10 vezes para benchmark... (pode demorar)\n";
+        
+        vector<double> dist_bf;
+        vector<int> pai_bf;
+        bool tem_ciclo = false;
+        double tempo_medio_bf = 0.0;
+
+        auto start_bf = chrono::high_resolution_clock::now();
+        for(int i=0; i<10; ++i) {
+            if(i % 2 == 0) cout << "  -> Rodada " << (i+1) << "/10..." << endl; // Feedback visual
+            auto res = bellman_ford(*grafo, destino_t);
+            if(i==0) { 
+                tem_ciclo = res.first;
+                dist_bf = res.second.first;
+                pai_bf = res.second.second;
+            }
+            
+            if (tem_ciclo) {
+                cout << "  -> Ciclo detectado na rodada " << (i+1) << ". Interrompendo benchmark.\n";
+                break; 
+            }
+        }
+        auto end_bf = chrono::high_resolution_clock::now();
+        tempo_medio_bf = chrono::duration_cast<chrono::milliseconds>(end_bf - start_bf).count() / 10.0 / 1000.0;
+
+        // Tabela 1: Resultados Bellman-Ford
+        cout << "\n[Tabela 1] Resultados Bellman-Ford (Destino: " << destino_t << ")\n";
+        if (tem_ciclo) {
+            cout << "!!! CICLO NEGATIVO DETECTADO !!! As distancias podem estar incorretas.\n";
+            out_estudo << "!!! CICLO NEGATIVO DETECTADO !!!\n";
+        }
+        
+        // Imprime na TELA
+        RelatorioUtils::imprimir_borda_tabela_dijkstra(cout);
+        RelatorioUtils::imprimir_linha_tabela(cout, "Origem", "Distancia", "Tempo Medio (s)");
+        RelatorioUtils::imprimir_borda_tabela_dijkstra(cout);
+        
+        // Imprime no ARQUIVO
+        out_estudo << "[Tabela 1] Resultados Bellman-Ford\n";
+        out_estudo << "Tempo Medio: " << fixed << setprecision(6) << tempo_medio_bf << " s\n";
+        
+        for(int u : origens) {
+            if(u > n) continue;
+            string d_str = (dist_bf[u] == std::numeric_limits<double>::infinity()) ? "INF" : to_string(dist_bf[u]);
+            RelatorioUtils::imprimir_linha_tabela(cout, to_string(u), d_str, to_string(tempo_medio_bf));
+            out_estudo << "Origem " << u << " -> Destino " << destino_t << ": " << d_str << "\n";
+        }
+        RelatorioUtils::imprimir_borda_tabela_dijkstra(cout);
+        if (!tem_ciclo) {
+            cout << "Salvando a estrutura da arvore em arquivo...\n";
+            RelatorioUtils::salvar_arvore_em_arquivo(pai_bf, n, nome_base_arquivo);
+        }
+
+        // ---------------------------------------------------------
+        // PARTE B: DIJKSTRA (Comparativo)
+        // ---------------------------------------------------------
+        cout << "\n=== 2. Comparativo com Dijkstra ===" << endl;
+
+        if (tem_peso_negativo) {
+            cout << "AVISO: O grafo contem pesos negativos. O Dijkstra NAO sera executado.\n";
+            out_estudo << "AVISO: Grafo com pesos negativos. Dijkstra pulado.\n";
+        } else if (tem_ciclo) {
+             cout << "AVISO: Ciclo negativo detectado. O Dijkstra NAO sera executado para evitar loop infinito ou resultados errados.\n";
+             out_estudo << "AVISO: Ciclo negativo detectado. Dijkstra pulado.\n";
+        } else {
+            cout << "Gerando grafo invertido para o Dijkstra...\n";
+            auto grafo_invertido = criar_grafo_invertido(*grafo);
+            
+            vector<double> dist_dijkstra;
+            double tempo_medio_dijkstra = 0.0;
+
+            cout << "Rodando 10 vezes para benchmark...\n";
+            auto start_dj = chrono::high_resolution_clock::now();
+            for(int i=0; i<10; ++i) {
+                // Feedback visual apenas na primeira e última para não poluir
+                if(i==0 || i==9) cout << "  -> Rodada " << (i+1) << "/10..." << endl; 
+                FilaComHeap fila; 
+                auto res = dijkstra(*grafo_invertido, destino_t, fila);
+                if(i==0) dist_dijkstra = res.first;
+            }
+            auto end_dj = chrono::high_resolution_clock::now();
+            tempo_medio_dijkstra = chrono::duration_cast<chrono::milliseconds>(end_dj - start_dj).count() / 10.0 / 1000.0;
+
+            // Tabela 2: Comparação de Distâncias
+            cout << "\n[Tabela 2] Comparacao de Distancias (Bellman-Ford vs Dijkstra)\n";
+            cout << "   +------------+--------------------+--------------------+" << endl;
+            cout << "   | Origem     | Dist. Bellman-Ford | Dist. Dijkstra     |" << endl;
+            cout << "   +------------+--------------------+--------------------+" << endl;
+            
+            out_estudo << "[Tabela 2] Comparacao de Distancias\n";
+            
+            for(int u : origens) {
+                if(u > n) continue;
+                string bf_s = (dist_bf[u] == std::numeric_limits<double>::infinity()) ? "INF" : to_string(dist_bf[u]);
+                string dj_s = (dist_dijkstra[u] == std::numeric_limits<double>::infinity()) ? "INF" : to_string(dist_dijkstra[u]);
+                
+                cout << "   | " << left << setw(10) << u 
+                     << " | " << left << setw(18) << bf_s 
+                     << " | " << left << setw(18) << dj_s << " |" << endl;
+                
+                out_estudo << "Origem " << u << ": BF=" << bf_s << " | Dijkstra=" << dj_s << "\n";
+            }
+             cout << "   +------------+--------------------+--------------------+" << endl;
+
+            // Tabela 3: Comparação de Tempo
+            cout << "\n[Tabela 3] Comparacao de Tempo Medio (s)\n";
+            cout << "   +----------------------+----------------------+" << endl;
+            cout << "   | Algoritmo            | Tempo (s)            |" << endl;
+            cout << "   +----------------------+----------------------+" << endl;
+            cout << "   | Bellman-Ford (SPFA)  | " << left << setw(20) << fixed << setprecision(6) << tempo_medio_bf << " |" << endl;
+            cout << "   | Dijkstra (Heap)      | " << left << setw(20) << fixed << setprecision(6) << tempo_medio_dijkstra << " |" << endl;
+            cout << "   +----------------------+----------------------+" << endl;
+            
+            out_estudo << "\n[Tabela 3] Tempos Medios\n";
+            out_estudo << "Bellman-Ford: " << tempo_medio_bf << " s\n";
+            out_estudo << "Dijkstra: " << tempo_medio_dijkstra << " s\n";
+
+            if(tempo_medio_dijkstra < tempo_medio_bf) {
+                double speedup = tempo_medio_bf / (tempo_medio_dijkstra > 0 ? tempo_medio_dijkstra : 1e-9);
+                 cout << "\nConclusao: Dijkstra foi " << setprecision(1) << speedup << "x mais rapido.\n";
+                 out_estudo << "Conclusao: Dijkstra foi " << speedup << "x mais rapido.\n";
+            }
+        }
+        
+        out_estudo.close();
+        cout << "\nRelatorio completo salvo em '" << arquivo_saida_estudo << "'.\n";
+    }
     else {
-        cerr << "Erro: Modo '" << modo << "' invalido. Use 'relatorio' ou 'dijkstra'.\n";
+        cerr << "Erro: Modo '" << modo << "' invalido. Use 'relatorio', 'dijkstra', 'bellman-ford' ou 'estudo_caso'.\n";
         return 1;
     }
 
